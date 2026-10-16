@@ -4,7 +4,7 @@
 // whole world (room), not just the ones at the same star. It refreshes every few
 // seconds, because delegates only report now and then.
 
-const LABELS = { world: 'Normal', speedrun: 'Speedrun', hangout: 'Hangout' };
+const LABELS = { normal: 'Normal', speedrun: 'Speedrun', hangout: 'Hangout' };
 const REFRESH_MS = 2000;
 
 const STYLE = `
