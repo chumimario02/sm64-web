@@ -1,10 +1,11 @@
 // On-screen controls for phones and tablets: a floating analog stick on the left
 // half of the screen, N64 buttons on the right, pinching on the right half to zoom
-// the camera, and a chat button that opens the room-wide text chat (ui/room_chat.js).
-// Kept small and see-through so the game (and its star counter, top right) stays visible.
-// Pad changes go to the game's touch controller (src/pc/web/web_touch.c) through
-// `sendPad`. The old level chat callback `sendChat` is kept as a fallback if room chat
-// is not loaded.
+// the camera, and two chat buttons:
+//   💬  room-wide text chat (ui/room_chat.js)
+//   🗨️  level chat (in-game, only players on your level)
+// Kept small and see-through so the game stays visible.
+// Pad changes go to the game's touch controller through `sendPad`;
+// level chat lines through `sendChat`.
 
 const STICK_RANGE = 80;      // N64 stick values reach about ±80
 const STICK_RADIUS_PX = 56;  // finger travel for a full tilt
@@ -37,9 +38,8 @@ const BUTTONS = [
   { label: '▼', mask: 0x0004, className: 'c cd' },
 ];
 
-// Right-hand cluster, bottom right: A/B/Z under the thumb (above the camera icon),
-// the C diamond above them (not at the top, where the HUD is), R above that. L sits under the lives counter,
-// START and chat at the bottom middle: the bottom left is where chat lines appear.
+// Right-hand cluster, bottom right: A/B/Z under the thumb, C diamond above, R above that.
+// START at bottom center; room chat 💬 and level chat 🗨️ beside it.
 const STYLE = `
   #touch { position: fixed; inset: 0; pointer-events: none; touch-action: none; user-select: none; -webkit-user-select: none; }
   #touch .stick-zone { position: absolute; left: 0; top: 0; width: 50%; height: 100%; pointer-events: auto; }
@@ -62,7 +62,8 @@ const STYLE = `
   #touch .r { right: 18px; bottom: 296px; width: 52px; }
   #touch .l { left: 14px; top: 104px; width: 52px; }
   #touch .start { left: 50%; bottom: 10px; transform: translateX(-50%); width: 64px; }
-  #touch .chat-open { left: calc(50% + 40px); bottom: 10px; width: 40px; border-radius: 14px; height: 28px; font-size: 14px; }
+  #touch .chat-room { left: calc(50% + 40px); bottom: 10px; width: 40px; border-radius: 14px; height: 28px; font-size: 14px; }
+  #touch .chat-level { left: calc(50% + 86px); bottom: 10px; width: 40px; border-radius: 14px; height: 28px; font-size: 14px; }
   #touch .chat { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); width: min(92vw, 520px);
     display: none; gap: 6px; pointer-events: auto; }
   #touch .chat.open { display: flex; }
@@ -77,7 +78,7 @@ export function wantsTouchControls(params) {
   return matchMedia('(pointer: coarse)').matches;
 }
 
-// sendPad(stickX, stickY, cameraX, cameraY, buttons), sendChat(text) — level chat fallback
+// sendPad(stickX, stickY, cameraX, cameraY, buttons), sendChat(text) — level chat
 export function startTouchControls(sendPad, sendChat) {
   const style = document.createElement('style');
   style.textContent = STYLE;
@@ -209,9 +210,11 @@ function attachPinchZoom(zone, pulse) {
   zone.addEventListener('pointercancel', lift);
 }
 
-// Chat button: prefer room-wide chat (ui/room_chat.js). Fallback = old level chat form.
+// Two chat buttons:
+//   💬 room chat (whole ?room=) via room_chat.js
+//   🗨️ level chat (in-game, same level only) via sendChat
 function attachChat(root, sendChat) {
-  // Fallback form (only used if room chat is not present)
+  // Level-chat form (top of screen when open)
   const form = document.createElement('form');
   form.className = 'chat';
   form.innerHTML = `<input type="text" maxlength="${CHAT_MAX}" enterkeyhint="send" autocomplete="off" placeholder="Chat del nivel">`
@@ -238,16 +241,14 @@ function attachChat(root, sendChat) {
     });
   }
 
-  // 💬 opens room chat (same as pressing T). Falls back to level chat if room chat is missing.
-  makeButton(root, '💬', 'chat-open').addEventListener('click', () => {
-    const room = document.getElementById('room-chat');
-    if (room) {
-      // Same signal room_chat.js listens for on key T
-      window.dispatchEvent(new CustomEvent('sm64-open-room-chat'));
-      // Also open via keyboard path (room_chat listens for keydown T)
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'T', bubbles: true, cancelable: true }));
-      return;
-    }
+  // 💬 → chat de sala (toda la room)
+  makeButton(root, '💬', 'chat-room').addEventListener('click', () => {
+    window.dispatchEvent(new CustomEvent('sm64-open-room-chat'));
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'T', bubbles: true, cancelable: true }));
+  });
+
+  // 🗨️ → chat de nivel (solo jugadores en tu nivel)
+  makeButton(root, '🗨️', 'chat-level').addEventListener('click', () => {
     form.classList.add('open');
     input.value = '';
     input.focus();
