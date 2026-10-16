@@ -1,9 +1,10 @@
 // On-screen controls for phones and tablets: a floating analog stick on the left
 // half of the screen, N64 buttons on the right, pinching on the right half to zoom
-// the camera, and a chat button. Kept small and
-// see-through so the game (and its star counter, top right) stays visible.
+// the camera, and a chat button that opens the room-wide text chat (ui/room_chat.js).
+// Kept small and see-through so the game (and its star counter, top right) stays visible.
 // Pad changes go to the game's touch controller (src/pc/web/web_touch.c) through
-// `sendPad`; chat lines through `sendChat`.
+// `sendPad`. The old level chat callback `sendChat` is kept as a fallback if room chat
+// is not loaded.
 
 const STICK_RANGE = 80;      // N64 stick values reach about ±80
 const STICK_RADIUS_PX = 56;  // finger travel for a full tilt
@@ -76,7 +77,7 @@ export function wantsTouchControls(params) {
   return matchMedia('(pointer: coarse)').matches;
 }
 
-// sendPad(stickX, stickY, cameraX, cameraY, buttons), sendChat(text)
+// sendPad(stickX, stickY, cameraX, cameraY, buttons), sendChat(text) — level chat fallback
 export function startTouchControls(sendPad, sendChat) {
   const style = document.createElement('style');
   style.textContent = STYLE;
@@ -208,8 +209,9 @@ function attachPinchZoom(zone, pulse) {
   zone.addEventListener('pointercancel', lift);
 }
 
-// A chat line typed with the phone's keyboard. Keys typed here stay out of the game.
+// Chat button: prefer room-wide chat (ui/room_chat.js). Fallback = old level chat form.
 function attachChat(root, sendChat) {
+  // Fallback form (only used if room chat is not present)
   const form = document.createElement('form');
   form.className = 'chat';
   form.innerHTML = `<input type="text" maxlength="${CHAT_MAX}" enterkeyhint="send" autocomplete="off" placeholder="Chat del nivel">`
@@ -217,28 +219,37 @@ function attachChat(root, sendChat) {
   root.appendChild(form);
   const input = form.querySelector('input');
 
-  const close = () => { form.classList.remove('open'); input.blur(); };
-  // The keyboard may pan what's visible (iOS): keep the box at the top of what's shown
+  const closeLevel = () => { form.classList.remove('open'); input.blur(); };
   const follow = () => { form.style.top = `${(globalThis.visualViewport?.offsetTop ?? 0) + 10}px`; };
   globalThis.visualViewport?.addEventListener('resize', follow);
   globalThis.visualViewport?.addEventListener('scroll', follow);
-  // a click (not pointerdown) so phones accept focusing the field and show the keyboard
-  makeButton(root, '💬', 'chat-open').addEventListener('click', () => {
-    form.classList.add('open');
-    input.value = '';
-    input.focus();
-  });
+
   form.addEventListener('submit', e => {
     e.preventDefault();
     const text = input.value.trim();
     if (text) sendChat(text);
-    close();
+    closeLevel();
   });
   input.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== input) form.classList.remove('open'); }, 150));
   for (const type of ['keydown', 'keyup', 'keypress']) {
     input.addEventListener(type, e => {
       e.stopPropagation();
-      if (type === 'keydown' && e.key === 'Escape') close();
+      if (type === 'keydown' && e.key === 'Escape') closeLevel();
     });
   }
+
+  // 💬 opens room chat (same as pressing T). Falls back to level chat if room chat is missing.
+  makeButton(root, '💬', 'chat-open').addEventListener('click', () => {
+    const room = document.getElementById('room-chat');
+    if (room) {
+      // Same signal room_chat.js listens for on key T
+      window.dispatchEvent(new CustomEvent('sm64-open-room-chat'));
+      // Also open via keyboard path (room_chat listens for keydown T)
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'T', bubbles: true, cancelable: true }));
+      return;
+    }
+    form.classList.add('open');
+    input.value = '';
+    input.focus();
+  });
 }
